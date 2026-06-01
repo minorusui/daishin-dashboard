@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大進建設 実績ダッシュボード</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --ink:#1f2a37; --sub:#6b7280;
+    --line:#e5e7eb; --head:#0f3b66; --accent:#1763a6; --accentbg:#eef4fb;
+    --cancel:#9a3412; --cancelbg:#fff3ec; --total:#f2f6fb; --zero:#c8cdd4;
+    --err:#b42318; --errbg:#fdecea; --warn:#92600a; --warnbg:#fff7e6;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Meiryo",sans-serif;
+       background:var(--bg);color:var(--ink);font-size:13px;}
+  header{background:var(--head);color:#fff;padding:14px 22px;}
+  header h1{margin:0;font-size:18px;font-weight:700;letter-spacing:.02em;}
+  header .sub{font-size:12px;opacity:.8;margin-top:2px;}
+  .tabbar{display:flex;gap:4px;padding:0 22px;background:var(--head);}
+  .tabbar button{background:rgba(255,255,255,.12);color:#fff;border:none;
+       padding:9px 18px;border-radius:8px 8px 0 0;cursor:pointer;font-size:13px;font-weight:600;}
+  .tabbar button.on{background:var(--bg);color:var(--head);}
+  .bar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;
+       padding:12px 22px;background:var(--card);border-bottom:1px solid var(--line);
+       position:sticky;top:0;z-index:5;}
+  .bar label{font-size:12px;color:var(--sub);margin-right:6px;}
+  .bar .ctl{display:flex;align-items:center;}
+  select,button{font-size:13px;padding:6px 10px;border:1px solid var(--line);
+       border-radius:7px;background:#fff;color:var(--ink);cursor:pointer;}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .toggle{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .toggle button{border:none;border-radius:0;background:#fff;padding:6px 14px;}
+  .toggle button.on{background:var(--accent);color:#fff;}
+  .chk{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink);cursor:pointer;}
+  .status{font-size:12px;color:var(--sub);margin-left:auto;}
+  main{padding:18px 22px 60px;}
+  .kpis{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px;}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;
+       padding:14px 18px;min-width:160px;flex:1;}
+  .kpi.flag{border-color:var(--warn);background:var(--warnbg);}
+  .kpi .t{font-size:12px;color:var(--sub);}
+  .kpi .v{font-size:22px;font-weight:700;margin-top:4px;}
+  .kpi .u{font-size:12px;color:var(--sub);font-weight:400;margin-left:3px;}
+  section.block{background:var(--card);border:1px solid var(--line);border-radius:12px;
+       margin-bottom:18px;overflow:hidden;}
+  .block h2{margin:0;padding:11px 16px;font-size:14px;background:var(--accentbg);
+       color:var(--head);border-bottom:1px solid var(--line);}
+  .block.cancel h2{background:var(--cancelbg);color:var(--cancel);}
+  .block .note{padding:8px 16px;font-size:12px;color:var(--sub);border-bottom:1px solid var(--line);}
+  .scroll{overflow-x:auto;}
+  table{border-collapse:collapse;width:100%;white-space:nowrap;}
+  th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;}
+  th{background:#fafbfc;font-weight:600;color:var(--sub);font-size:12px;
+     position:sticky;border-bottom:2px solid var(--line);}
+  th.dim,td.dim{text-align:left;position:sticky;left:0;background:#fff;
+     font-weight:600;color:var(--ink);min-width:120px;border-right:1px solid var(--line);}
+  th.dim{background:#fafbfc;z-index:2;}
+  td.l{text-align:left;}
+  tr.total td{background:var(--total);font-weight:700;border-top:2px solid var(--line);}
+  tr.total td.dim{background:var(--total);}
+  td.col-total{background:var(--total);font-weight:600;}
+  tr.err td{background:var(--errbg);}
+  tr.warn td{background:var(--warnbg);}
+  .badge{display:inline-block;padding:2px 8px;border-radius:11px;font-size:11px;font-weight:700;}
+  .badge.err{background:var(--err);color:#fff;}
+  .badge.warn{background:var(--warn);color:#fff;}
+  .badge.ok{background:#e6f4ea;color:#1e7e34;}
+  .pct.err{color:var(--err);font-weight:700;}
+  .zero{color:var(--zero);}
+  .msg{padding:40px 20px;text-align:center;color:var(--sub);line-height:1.7;}
+  .msg.err{color:var(--cancel);}
+  code{background:#eef1f4;padding:1px 5px;border-radius:4px;font-size:12px;}
+  footer{padding:14px 22px;color:var(--sub);font-size:11px;line-height:1.6;}
+</style>
+</head>
+<body>
+<header>
+  <h1>大進建設 実績ダッシュボード</h1>
+  <div class="sub">契約・完工 実績管理 ／ 店舗別・営業別・全社合計（毎年1月〜12月）</div>
+</header>
+
+<div class="tabbar">
+  <button id="tabSummary" class="on">集計ダッシュボード</button>
+  <button id="tabDetail">物件一覧（粗利分析）</button>
+</div>
+
+<div class="bar">
+  <div class="ctl"><label>対象年</label><select id="yearSel"></select></div>
+  <div class="ctl" id="ctlAxis"><label>集計軸</label>
+    <span class="toggle">
+      <button id="byStore" class="on">店舗別</button>
+      <button id="bySales">営業別</button>
+    </span>
+  </div>
+  <label class="chk" id="ctlOnlyFlag" style="display:none">
+    <input type="checkbox" id="onlyFlag"> 低粗利・未入力のみ表示
+  </label>
+  <label class="chk" id="ctlAllYears" style="display:none">
+    <input type="checkbox" id="allYears"> 全年表示
+  </label>
+  <button id="reload" class="primary">最新データを再取得</button>
+  <span class="status" id="status">読み込み中…</span>
+</div>
+
+<main id="main">
+  <div class="msg" id="loading">Googleスプレッドシートからデータを取得しています…</div>
+</main>
+
+<footer id="footer"></footer>
+
+<script>
+// ===== 設定 =====
+const SHEET_ID = "1JVdBC-N_MPyJppIXu6I9AQpXd6goAHnu0uTuZgxBI70";
+const GID = "2059228612"; // 注文タブ
+const QUERY = "select G,H,K,M,N,S,T,V,AD,BD"; // 工事番号,お客様名,営業,店舗,契約日,完工日予定,変更後完工日予定,状況,工事代金合計(税抜),建物粗利(税抜)
+const LOW_MARGIN = 0.20; // 粗利率の警告しきい値（20%未満）
+
+// ===== 状態 =====
+let ROWS = [];
+let dim = "store";       // store | sales
+let view = "summary";    // summary | detail
+const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
+
+// ===== データ取得（gviz JSONP） =====
+function loadData(){
+  setStatus("読み込み中…");
+  document.getElementById("main").innerHTML =
+    '<div class="msg" id="loading">Googleスプレッドシートからデータを取得しています…</div>';
+  const cbName = "gvizCb_" + Date.now();
+  window[cbName] = function(resp){ try{ handleResponse(resp); } finally { cleanup(); } };
+  const url = "https://docs.google.com/spreadsheets/d/" + SHEET_ID +
+              "/gviz/tq?gid=" + GID + "&headers=3" +
+              "&tq=" + encodeURIComponent(QUERY) +
+              "&tqx=reqId:0;responseHandler:" + cbName +
+              "&_=" + Date.now();
+  const s = document.createElement("script");
+  s.src = url; s.id = cbName + "_s";
+  s.onerror = function(){ showError("スクリプトの読み込みに失敗しました。"); cleanup(); };
+  document.body.appendChild(s);
+  const timer = setTimeout(function(){
+    if(window[cbName]){ showError("取得がタイムアウトしました。"); cleanup(); }
+  }, 15000);
+  function cleanup(){
+    clearTimeout(timer);
+    delete window[cbName];
+    const el = document.getElementById(cbName + "_s");
+    if(el) el.remove();
+  }
+}
+
+function parseGDate(v){
+  if(v == null) return null;
+  if(v instanceof Date) return v;
+  const m = /Date\((\d+),(\d+),(\d+)/.exec(String(v));
+  if(m) return new Date(+m[1], +m[2], +m[3]);
+  const d = new Date(v); return isNaN(d) ? null : d;
+}
+function isBlank(cell){ return !cell || cell.v == null || cell.v === ""; }
+function num(v){ const n=(typeof v==="number")?v:parseFloat(String(v).replace(/[^0-9.\-]/g,"")); return isNaN(n)?0:n; }
+function str(v){ return v==null ? "" : String(v).trim(); }
+
+function handleResponse(resp){
+  if(!resp || resp.status === "error"){
+    const msg = resp && resp.errors ? resp.errors.map(e=>e.detailed_message||e.message).join(" / ") : "不明なエラー";
+    showError("スプレッドシートからの応答がエラーでした：" + msg);
+    return;
+  }
+  const rows = resp.table.rows || [];
+  ROWS = rows.map(function(r){
+    const c = r.c || [];
+    const cell = (x)=> c[x];
+    const g = (x)=> c[x] ? c[x].v : null;
+    return {
+      no: str(g(0)),
+      customer: str(g(1)),
+      sales: str(g(2)) || "(営業未設定)",
+      store: str(g(3)) || "(店舗未設定)",
+      contract: parseGDate(g(4)),
+      kankoPlan: parseGDate(g(5)),
+      kankoPlanRev: parseGDate(g(6)),
+      status: str(g(7)),
+      amount: num(g(8)),
+      amountBlank: isBlank(cell(8)),
+      profit: num(g(9)),
+      profitBlank: isBlank(cell(9))
+    };
+  }).filter(function(r){
+    return r.customer && r.customer.indexOf("お客様") === -1;
+  });
+  buildYearOptions();
+  render();
+  setStatus("取得完了：" + new Date().toLocaleString("ja-JP") + "（" + ROWS.length + "件）");
+}
+
+function isCancel(r){ return r.status.indexOf("キャンセル") !== -1; }
+function effKanko(r){ return r.kankoPlanRev || r.kankoPlan; }
+function ratioOf(r){ // 粗利率（未入力ならnull）
+  if(r.profitBlank || r.amountBlank || r.amount<=0) return null;
+  return r.profit / r.amount;
+}
+
+function buildYearOptions(){
+  const years = new Set();
+  ROWS.forEach(function(r){
+    if(r.contract) years.add(r.contract.getFullYear());
+    const e = effKanko(r); if(e) years.add(e.getFullYear());
+  });
+  const arr = Array.from(years).filter(y=>y>=2000 && y<=2100).sort((a,b)=>b-a);
+  const sel = document.getElementById("yearSel");
+  const prev = sel.value;
+  sel.innerHTML = arr.map(y=>'<option value="'+y+'">'+y+'年</option>').join("");
+  if(prev && arr.indexOf(+prev)!==-1) sel.value = prev;
+  else if(arr.indexOf(2026)!==-1) sel.value = "2026";
+}
+
+// ===== 集計（マトリクス） =====
+function aggregate(year){
+  const amount={},count={},profit={},kanko={},cancel={};
+  const keys=new Set();
+  const ensure=(o,k)=>{ if(!o[k]) o[k]=new Array(12).fill(0); return o[k]; };
+  ROWS.forEach(function(r){
+    const k=(dim==="store")?r.store:r.sales;
+    if(r.contract && r.contract.getFullYear()===year){
+      const m=r.contract.getMonth(); keys.add(k);
+      if(isCancel(r)){ ensure(cancel,k)[m]+=1; }
+      else{ ensure(amount,k)[m]+=r.amount; ensure(count,k)[m]+=1; ensure(profit,k)[m]+=r.profit; }
+    }
+    if(!isCancel(r)){
+      const e=effKanko(r);
+      if(e && e.getFullYear()===year){ keys.add(k); ensure(kanko,k)[e.getMonth()]+=1; }
+    }
+  });
+  return {amount,count,profit,kanko,cancel,keys:Array.from(keys)};
+}
+function rowTotal(arr){ return arr.reduce((a,b)=>a+b,0); }
+function sumAll(obj){ let s=0; for(const k in obj){ s+=rowTotal(obj[k]); } return s; }
+
+// ===== 共通整形 =====
+function fmtYen(n){ return n ? Math.round(n).toLocaleString("ja-JP") : '<span class="zero">0</span>'; }
+function fmtCnt(n){ return n ? n.toLocaleString("ja-JP") : '<span class="zero">0</span>'; }
+function fmtPct(x){ return (x*100).toFixed(1)+"%"; }
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function setStatus(s){ document.getElementById("status").textContent = s; }
+function fmtDate(d){ return d ? (d.getFullYear()+"/"+(d.getMonth()+1)+"/"+d.getDate()) : ""; }
+
+// ===== ビュー切替 =====
+function setView(v){
+  view=v;
+  document.getElementById("tabSummary").classList.toggle("on", v==="summary");
+  document.getElementById("tabDetail").classList.toggle("on", v==="detail");
+  document.getElementById("ctlAxis").style.display   = (v==="summary")?"flex":"none";
+  document.getElementById("ctlOnlyFlag").style.display = (v==="detail")?"inline-flex":"none";
+  document.getElementById("ctlAllYears").style.display = (v==="detail")?"inline-flex":"none";
+  render();
+}
+
+function render(){
+  if(view==="summary") renderSummary();
+  else renderDetail();
+  renderFooter();
+}
+
+// ===== 集計ビュー =====
+function buildMatrix(title, data, order, fmt, cancelClass){
+  const sec=document.createElement("section");
+  sec.className="block"+(cancelClass?" cancel":"");
+  let html="<h2>"+title+"</h2><div class='scroll'><table><thead><tr>";
+  html+="<th class='dim'>"+(dim==="store"?"店舗":"営業")+"</th>";
+  MONTHS.forEach(m=>html+="<th>"+m+"月</th>");
+  html+="<th class='col-total'>合計</th></tr></thead><tbody>";
+  const colTotals=new Array(12).fill(0); let grand=0;
+  order.forEach(function(k){
+    const arr=data[k]||new Array(12).fill(0); const rt=rowTotal(arr);
+    if(rt===0) return;
+    html+="<tr><td class='dim'>"+escapeHtml(k)+"</td>";
+    arr.forEach((v,i)=>{ colTotals[i]+=v; html+="<td>"+fmt(v)+"</td>"; });
+    html+="<td class='col-total'>"+fmt(rt)+"</td></tr>"; grand+=rt;
+  });
+  html+="<tr class='total'><td class='dim'>全社合計</td>";
+  colTotals.forEach(v=>html+="<td>"+fmt(v)+"</td>");
+  html+="<td class='col-total'>"+fmt(grand)+"</td></tr></tbody></table></div>";
+  sec.innerHTML=html; return sec;
+}
+
+function renderSummary(){
+  const sel=document.getElementById("yearSel"); if(!sel.value) return;
+  const year=+sel.value; const agg=aggregate(year);
+  const order=agg.keys.slice().sort((a,b)=>rowTotal(agg.amount[b]||[0])-rowTotal(agg.amount[a]||[0]));
+  const main=document.getElementById("main"); main.innerHTML="";
+
+  // KPI：未入力を除いた「真の粗利率」と、未入力件数を併記
+  let sumAmt=0,sumCnt=0,sumProf=0,sumKanko=0,sumCancel=0,amtForRatio=0,profForRatio=0,blankProfit=0;
+  ROWS.forEach(function(r){
+    if(r.contract && r.contract.getFullYear()===year && !isCancel(r)){
+      sumAmt+=r.amount; sumCnt+=1; sumProf+=r.profit;
+      if(r.profitBlank && !r.amountBlank && r.amount>0) blankProfit+=1;
+      if(!r.profitBlank && !r.amountBlank && r.amount>0){ amtForRatio+=r.amount; profForRatio+=r.profit; }
+    }
+    if(r.contract && r.contract.getFullYear()===year && isCancel(r)) sumCancel+=1;
+    if(!isCancel(r)){ const e=effKanko(r); if(e&&e.getFullYear()===year) sumKanko+=1; }
+  });
+  const trueMargin = amtForRatio>0 ? profForRatio/amtForRatio : 0;
+
+  const kpis=document.createElement("div"); kpis.className="kpis";
+  kpis.innerHTML =
+    kpi("①請負契約金額(税抜)", fmtYen(sumAmt), "円","") +
+    kpi("②請負契約棟数", fmtCnt(sumCnt), "棟","") +
+    kpi("③契約粗利額(税抜)", fmtYen(sumProf), "円","") +
+    kpi("契約粗利率(入力済のみ)", trueMargin?fmtPct(trueMargin):"–", "","") +
+    kpi("粗利未入力", fmtCnt(blankProfit), "棟", blankProfit>0?"flag":"") +
+    kpi("④完工予定棟数", fmtCnt(sumKanko), "棟","") +
+    kpi("キャンセル棟数", fmtCnt(sumCancel), "棟","");
+  main.appendChild(kpis);
+
+  if(blankProfit>0){
+    const note=document.createElement("section"); note.className="block";
+    note.innerHTML="<div class='note'>※ 当年契約のうち <b>"+blankProfit+"棟</b> が建物粗利(税抜)未入力です。"+
+      "未入力分は粗利率の分子が0となり全社粗利率を押し下げます。内訳は「物件一覧（粗利分析）」タブで確認できます。</div>";
+    main.appendChild(note);
+  }
+
+  main.appendChild(buildMatrix("① 請負契約金額（税抜）／契約日基準　単位:円", agg.amount, order, fmtYen, false));
+  main.appendChild(buildMatrix("② 請負契約棟数／契約日基準　単位:棟", agg.count, order, fmtCnt, false));
+  main.appendChild(buildMatrix("③ 契約粗利額（税抜）／契約日基準　単位:円", agg.profit, order, fmtYen, false));
+  main.appendChild(buildMatrix("④ 完工予定棟数／変更後完工日予定優先　単位:棟", agg.kanko, order, fmtCnt, false));
+  main.appendChild(buildMatrix("キャンセル棟数／契約日基準　単位:棟", agg.cancel, order, fmtCnt, true));
+}
+
+// ===== 物件一覧（粗利分析）ビュー =====
+function judge(r){
+  if(r.amountBlank || r.amount<=0) return {cls:"warn", label:"金額未入力", badge:"warn"};
+  if(r.profitBlank) return {cls:"warn", label:"粗利未入力", badge:"warn"};
+  const ra=r.profit/r.amount;
+  if(ra < LOW_MARGIN) return {cls:"err", label:"低粗利率", badge:"err"};
+  return {cls:"", label:"", badge:"ok"};
+}
+
+function renderDetail(){
+  const sel=document.getElementById("yearSel"); if(!sel.value) return;
+  const year=+sel.value;
+  const allYears=document.getElementById("allYears").checked;
+  const onlyFlag=document.getElementById("onlyFlag").checked;
+  const main=document.getElementById("main"); main.innerHTML="";
+
+  let rows=ROWS.filter(r=>!isCancel(r) && r.contract);
+  if(!allYears) rows=rows.filter(r=>r.contract.getFullYear()===year);
+
+  // 営業担当別サマリ
+  const byS={};
+  rows.forEach(function(r){
+    const k=r.sales; if(!byS[k]) byS[k]={cnt:0,amt:0,prof:0,amtR:0,profR:0,low:0,blank:0};
+    const o=byS[k]; o.cnt++; o.amt+=r.amount; o.prof+=r.profit;
+    if(r.profitBlank||r.amountBlank||r.amount<=0){ o.blank++; }
+    else{ o.amtR+=r.amount; o.profR+=r.profit; if(r.profit/r.amount<LOW_MARGIN) o.low++; }
+  });
+  const sKeys=Object.keys(byS).sort((a,b)=>(byS[b].low-byS[a].low)||(byS[b].blank-byS[a].blank)||(byS[b].amt-byS[a].amt));
+
+  const span=allYears?"全年":(year+"年");
+  let totLow=0, totBlank=0; sKeys.forEach(k=>{ totLow+=byS[k].low; totBlank+=byS[k].blank; });
+
+  const sum=document.createElement("section"); sum.className="block";
+  let sh="<h2>営業担当別サマリ（"+span+"・契約日基準・キャンセル除外）</h2>";
+  sh+="<div class='note'>低粗利率（"+(LOW_MARGIN*100)+"%未満）：<b style='color:var(--err)'>"+totLow+"件</b>　／　粗利未入力：<b style='color:var(--warn)'>"+totBlank+"件</b></div>";
+  sh+="<div class='scroll'><table><thead><tr><th class='dim'>営業担当</th><th>物件数</th><th>契約金額計(税抜)</th><th>粗利計(税抜)</th><th>加重粗利率<br>(入力済)</th><th>低粗利&lt;"+(LOW_MARGIN*100)+"%</th><th>粗利未入力</th></tr></thead><tbody>";
+  sKeys.forEach(function(k){
+    const o=byS[k]; const wm=o.amtR>0?o.profR/o.amtR:null;
+    sh+="<tr"+(o.low>0?" class='err'":(o.blank>0?" class='warn'":""))+">";
+    sh+="<td class='dim'>"+escapeHtml(k)+"</td>";
+    sh+="<td>"+fmtCnt(o.cnt)+"</td><td>"+fmtYen(o.amt)+"</td><td>"+fmtYen(o.prof)+"</td>";
+    sh+="<td class='pct"+(wm!==null&&wm<LOW_MARGIN?" err":"")+"'>"+(wm!==null?fmtPct(wm):"–")+"</td>";
+    sh+="<td>"+(o.low?("<span class='badge err'>"+o.low+"</span>"):"0")+"</td>";
+    sh+="<td>"+(o.blank?("<span class='badge warn'>"+o.blank+"</span>"):"0")+"</td></tr>";
+  });
+  sh+="</tbody></table></div>"; sum.innerHTML=sh; main.appendChild(sum);
+
+  // 物件別明細
+  let detail=rows.slice();
+  if(onlyFlag) detail=detail.filter(r=>judge(r).badge!=="ok");
+  // 並び：未入力→低粗利率昇順→その他
+  detail.sort(function(a,b){
+    const ra=ratioOf(a), rb=ratioOf(b);
+    const ka=(ra===null)?-1:ra, kb=(rb===null)?-1:rb;
+    return ka-kb;
+  });
+
+  const det=document.createElement("section"); det.className="block";
+  let dh="<h2>物件別明細（"+span+"・粗利率昇順）"+(onlyFlag?"／低粗利・未入力のみ":"")+"</h2>";
+  dh+="<div class='note'>赤=粗利率"+(LOW_MARGIN*100)+"%未満　／　琥珀=粗利・金額が未入力（要確認）。<b>"+detail.length+"件</b>表示。</div>";
+  dh+="<div class='scroll'><table><thead><tr><th class='dim'>お客様名</th><th class='l'>工事番号</th><th class='l'>営業</th><th class='l'>店舗</th><th class='l'>契約日</th><th>工事代金合計(税抜)</th><th>建物粗利(税抜)</th><th>粗利率</th><th class='l'>判定</th></tr></thead><tbody>";
+  detail.forEach(function(r){
+    const j=judge(r); const ra=ratioOf(r);
+    dh+="<tr"+(j.cls?(" class='"+j.cls+"'"):"")+">";
+    dh+="<td class='dim'>"+escapeHtml(r.customer)+"</td>";
+    dh+="<td class='l'>"+escapeHtml(r.no)+"</td>";
+    dh+="<td class='l'>"+escapeHtml(r.sales)+"</td>";
+    dh+="<td class='l'>"+escapeHtml(r.store)+"</td>";
+    dh+="<td class='l'>"+fmtDate(r.contract)+"</td>";
+    dh+="<td>"+(r.amountBlank?"<span class='zero'>未入力</span>":fmtYen(r.amount))+"</td>";
+    dh+="<td>"+(r.profitBlank?"<span class='zero'>未入力</span>":fmtYen(r.profit))+"</td>";
+    dh+="<td class='pct"+(j.badge==='err'?" err":"")+"'>"+(ra!==null?fmtPct(ra):"–")+"</td>";
+    dh+="<td class='l'>"+(j.label?("<span class='badge "+j.badge+"'>"+j.label+"</span>"):"<span class='badge ok'>OK</span>")+"</td></tr>";
+  });
+  dh+="</tbody></table></div>"; det.innerHTML=dh; main.appendChild(det);
+}
+
+function kpi(t,v,u,extra){ return "<div class='kpi "+(extra||"")+"'><div class='t'>"+t+"</div><div class='v'>"+v+(u?"<span class='u'>"+u+"</span>":"")+"</div></div>"; }
+
+function showError(msg){
+  document.getElementById("main").innerHTML =
+    '<div class="msg err">データを取得できませんでした。<br>'+escapeHtml(msg)+
+    '<br><br>確認事項：このブラウザで対象のGoogleアカウントにログインしているか、'+
+    'または「注文」タブが閲覧可能か。<br>解決しない場合は「ファイル→共有→ウェブに公開」で'+
+    '<code>注文</code>タブを公開すると確実に取得できます。</div>';
+  setStatus("エラー");
+}
+
+function renderFooter(){
+  document.getElementById("footer").innerHTML =
+    "データ元：受注一覧表2026_New「注文」タブ（ライブ取得）。本ページを開く／再取得で最新化されます。<br>"+
+    "集計定義：①請負契約金額=工事代金合計(税抜)／②請負契約棟数／③契約粗利額=建物粗利(税抜) は<b>契約日</b>の月で計上、キャンセルを除外。"+
+    "④完工予定棟数は<b>変更後完工日予定（無ければ完工日予定）</b>の月で計上、キャンセル除外。"+
+    "粗利率=建物粗利(税抜)÷工事代金合計(税抜)。粗利または金額が未入力の物件は率計算から除外し『要確認』表示。";
+}
+
+// ===== イベント =====
+document.getElementById("yearSel").addEventListener("change", render);
+document.getElementById("reload").addEventListener("click", loadData);
+document.getElementById("onlyFlag").addEventListener("change", render);
+document.getElementById("allYears").addEventListener("change", render);
+document.getElementById("byStore").addEventListener("click", function(){
+  dim="store"; this.classList.add("on"); document.getElementById("bySales").classList.remove("on"); render();
+});
+document.getElementById("bySales").addEventListener("click", function(){
+  dim="sales"; this.classList.add("on"); document.getElementById("byStore").classList.remove("on"); render();
+});
+document.getElementById("tabSummary").addEventListener("click", ()=>setView("summary"));
+document.getElementById("tabDetail").addEventListener("click", ()=>setView("detail"));
+
+loadData();
+</script>
+</body>
+</html>
