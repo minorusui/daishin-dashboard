@@ -127,7 +127,7 @@
 // ===== 設定 =====
 const SHEET_ID = "1JVdBC-N_MPyJppIXu6I9AQpXd6goAHnu0uTuZgxBI70";
 const GID = "2059228612"; // 注文タブ
-const QUERY = "select G,H,K,M,N,S,T,V,AD,BD"; // 工事番号,お客様名,営業,店舗,契約日,完工日予定,変更後完工日予定,状況,工事代金合計(税抜),建物粗利(税抜)
+const QUERY = "select G,H,K,M,N,S,T,V,AD,BD,AP"; // 工事番号,お客様名,営業,店舗,契約日,完工日予定,変更後完工日予定,状況,工事代金合計(税抜),建物粗利(税抜),工事請負代金(税抜)
 const LOW_MARGIN = 0.20; // 粗利率の警告しきい値（20%未満）
 
 // ===== 状態 =====
@@ -198,7 +198,8 @@ function handleResponse(resp){
       amount: num(g(8)),
       amountBlank: isBlank(cell(8)),
       profit: num(g(9)),
-      profitBlank: isBlank(cell(9))
+      profitBlank: isBlank(cell(9)),
+      workAmt: num(g(10)) // 工事請負代金(税抜) AP
     };
   }).filter(function(r){
     return r.customer && r.customer.indexOf("お客様") === -1;
@@ -239,6 +240,7 @@ function buildYearOptions(){
 // ===== 集計（マトリクス） =====
 function aggregate(year){
   const amount={},count={},profit={},kanko={},cancel={};
+  const kankoAmount={}, kankoProfit={}; // 完工予定年=year の 工事請負代金(税抜)/建物粗利(税抜)（dim×月）
   const segBacklog={}, segCurrent={}; // 完工予定年=year の区分別棟数（dim別合計）
   const keys=new Set();
   const ensure=(o,k)=>{ if(!o[k]) o[k]=new Array(12).fill(0); return o[k]; };
@@ -254,12 +256,14 @@ function aggregate(year){
       const e=effKanko(r);
       if(e && e.getFullYear()===year){
         keys.add(k); ensure(kanko,k)[e.getMonth()]+=1;
+        ensure(kankoAmount,k)[e.getMonth()]+=r.workAmt;
+        ensure(kankoProfit,k)[e.getMonth()]+=r.profit;
         const seg=completionSegment(r);
         if(seg==="backlog") inc(segBacklog,k); else inc(segCurrent,k);
       }
     }
   });
-  return {amount,count,profit,kanko,cancel,segBacklog,segCurrent,keys:Array.from(keys)};
+  return {amount,count,profit,kanko,kankoAmount,kankoProfit,cancel,segBacklog,segCurrent,keys:Array.from(keys)};
 }
 function rowTotal(arr){ return arr.reduce((a,b)=>a+b,0); }
 function sumAll(obj){ let s=0; for(const k in obj){ s+=rowTotal(obj[k]); } return s; }
@@ -349,6 +353,8 @@ function renderSummary(){
   });
   const trueMargin = amtForRatio>0 ? profForRatio/amtForRatio : 0;
   const segB=sumScalar(agg.segBacklog), segC=sumScalar(agg.segCurrent);
+  const kankoAmtTot=sumAll(agg.kankoAmount), kankoProfTot=sumAll(agg.kankoProfit);
+  const kankoMargin = kankoAmtTot>0 ? kankoProfTot/kankoAmtTot : 0;
 
   const kpis=document.createElement("div"); kpis.className="kpis";
   kpis.innerHTML =
@@ -357,9 +363,12 @@ function renderSummary(){
     kpi("③契約粗利額(税抜)", fmtYen(sumProf), "円","") +
     kpi("契約粗利率(入力済のみ)", trueMargin?fmtPct(trueMargin):"–", "","") +
     kpi("粗利未入力", fmtCnt(blankProfit), "棟", blankProfit>0?"flag":"") +
-    kpi("④完工予定棟数(年間合計)", fmtCnt(segB+segC), "棟","") +
+    kpi("完工予定棟数(年間合計)", fmtCnt(segB+segC), "棟","") +
     kpi("　うち受注残", fmtCnt(segB), "棟","backlog") +
     kpi("　うち今期契約", fmtCnt(segC), "棟","cur") +
+    kpi("④完工予定 工事請負代金(税抜)", fmtYen(kankoAmtTot), "円","") +
+    kpi("⑤完工予定 建物粗利(税抜)", fmtYen(kankoProfTot), "円","") +
+    kpi("完工予定 粗利率", kankoMargin?fmtPct(kankoMargin):"–", "","") +
     kpi("キャンセル棟数", fmtCnt(sumCancel), "棟","");
   main.appendChild(kpis);
 
@@ -373,7 +382,9 @@ function renderSummary(){
   main.appendChild(buildMatrix("① 請負契約金額（税抜）／契約日基準　単位:円", agg.amount, order, fmtYen, false));
   main.appendChild(buildMatrix("② 請負契約棟数／契約日基準　単位:棟", agg.count, order, fmtCnt, false));
   main.appendChild(buildMatrix("③ 契約粗利額（税抜）／契約日基準　単位:円", agg.profit, order, fmtYen, false));
-  main.appendChild(buildMatrix("④ 完工予定棟数／変更後完工日予定優先　単位:棟", agg.kanko, order, fmtCnt, false));
+  main.appendChild(buildMatrix("④ 完工予定 工事請負代金（税抜）／"+year+"年完工・変更後完工日予定優先・キャンセル除外　単位:円", agg.kankoAmount, order, fmtYen, false));
+  main.appendChild(buildMatrix("⑤ 完工予定 建物粗利（税抜）／"+year+"年完工・変更後完工日予定優先・キャンセル除外　単位:円", agg.kankoProfit, order, fmtYen, false));
+  main.appendChild(buildMatrix("完工予定棟数（月別）／変更後完工日予定優先・キャンセル除外　単位:棟", agg.kanko, order, fmtCnt, false));
   main.appendChild(buildSegBlock(year, agg, order));
   main.appendChild(buildMatrix("キャンセル棟数／契約日基準　単位:棟", agg.cancel, order, fmtCnt, true));
 }
@@ -502,7 +513,7 @@ function renderFooter(){
   document.getElementById("footer").innerHTML =
     "データ元：受注一覧表2026_New「注文」タブ（ライブ取得）。本ページを開く／再取得で最新化されます。<br>"+
     "集計定義：①請負契約金額=工事代金合計(税抜)／②請負契約棟数／③契約粗利額=建物粗利(税抜) は<b>契約日</b>の月で計上、キャンセルを除外。"+
-    "④完工予定棟数は<b>変更後完工日予定（無ければ完工日予定）</b>の月で計上、キャンセル除外。<br>"+
+    "④完工予定 工事請負代金(税抜)・⑤完工予定 建物粗利(税抜)・完工予定棟数は、<b>変更後完工日予定（無ければ完工日予定）が対象年</b>の物件を計上、キャンセル除外（④=AP列、⑤=BD列）。<br>"+
     "完工予定区分：<b>受注残</b>=契約年が完工予定年より前（前期以前契約の当期完工）、<b>今期契約</b>=契約年が完工予定年と同年。年間完工予定合計＝受注残＋今期契約。"+
     "粗利率=建物粗利(税抜)÷工事代金合計(税抜)。粗利・金額が未入力の物件は率計算から除外し『要確認』表示。";
 }
