@@ -80,6 +80,13 @@
        padding:0 10px;min-width:fit-content;}
   .compbar .cseg.order{background:var(--accent);}
   .compbar .cseg.tateuri{background:var(--green);}
+  /* 冒頭サマリー */
+  .block.summary h2{background:var(--head);color:#fff;}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px;vertical-align:-1px;}
+  .dot.company{background:var(--head);}
+  .dot.order{background:var(--accent);}
+  .dot.tateuri{background:var(--green);}
+  .dot.kanko{background:var(--cur);}
   section.block{background:var(--card);border:1px solid var(--line);border-radius:12px;
        margin-bottom:18px;overflow:hidden;}
   .block h2{margin:0;padding:11px 16px;font-size:14px;background:var(--accentbg);
@@ -445,17 +452,44 @@ function renderSummary(){
     }
     if(r.contract && r.contract.getFullYear()===year && isCancel(r)) sumCancel+=1;
   });
-  let tAmtSum=0,tCntSum=0,tProfSum=0,tBlankProfit=0;
+  let tAmtSum=0,tCntSum=0,tProfSum=0,tBlankProfit=0,tAmtForRatio=0,tProfForRatio=0;
   TROWS.forEach(function(r){
     if(r.contract && r.contract.getFullYear()===year){
       tAmtSum+=r.amount; tCntSum+=1; tProfSum+=r.profit;
       if(r.profitBlank) tBlankProfit+=1;
+      else if(!r.amountBlank && r.amount>0){ tAmtForRatio+=r.amount; tProfForRatio+=r.profit; }
     }
   });
+  const tMargin = tAmtForRatio>0 ? tProfForRatio/tAmtForRatio : 0;
   const trueMargin = amtForRatio>0 ? profForRatio/amtForRatio : 0;
   const segB=sumScalar(agg.segBacklog), segC=sumScalar(agg.segCurrent);
   const kankoAmtTot=sumAll(agg.kankoAmount), kankoProfTot=sumAll(agg.kankoProfit);
   const kankoMargin = kankoAmtTot>0 ? kankoProfTot/kankoAmtTot : 0;
+
+  // ===== 冒頭サマリー =====
+  const secSum=document.createElement("section"); secSum.className="block summary";
+  let sh="<h2>サマリー（"+year+"年・契約日基準）</h2><div class='scroll'><table><thead><tr>"+
+    "<th class='dim'>区分</th><th>契約棟数</th><th>契約金額(税抜)</th><th>契約粗利額(税抜)</th><th>粗利率</th><th class='l'>備考</th></tr></thead><tbody>";
+  sh+="<tr class='total'><td class='dim'><span class='dot company'></span>①全社合計（注文＋建売）</td>"+
+    "<td>"+fmtCnt(sumCnt+tCntSum)+"棟</td><td>"+fmtYen(sumAmt+tAmtSum)+"円</td><td>"+fmtYen(sumProf+tProfSum)+"円</td>"+
+    "<td>–</td><td class='l'>金額・粗利は注文＋建売の単純合算</td></tr>";
+  sh+="<tr><td class='dim'><span class='dot order'></span>②注文事業（請負契約）</td>"+
+    "<td>"+fmtCnt(sumCnt)+"棟</td><td>"+fmtYen(sumAmt)+"円</td><td>"+fmtYen(sumProf)+"円</td>"+
+    "<td>"+(trueMargin?fmtPct(trueMargin):"–")+"</td>"+
+    "<td class='l'>"+(blankProfit>0?"<span class='badge warn'>粗利未入力 "+blankProfit+"棟</span> ":"")+
+    (sumCancel>0?"<span class='badge err'>キャンセル "+sumCancel+"棟</span>":"")+
+    (blankProfit===0&&sumCancel===0?"<span class='zero'>—</span>":"")+"</td></tr>";
+  sh+="<tr><td class='dim'><span class='dot tateuri'></span>③建売事業（売買契約）</td>"+
+    "<td>"+fmtCnt(tCntSum)+"棟</td><td>"+fmtYen(tAmtSum)+"円</td><td>"+fmtYen(tProfSum)+"円</td>"+
+    "<td>"+(tMargin?fmtPct(tMargin):"–")+"</td>"+
+    "<td class='l'>"+(tBlankProfit>0?"<span class='badge warn'>粗利未入力 "+tBlankProfit+"棟</span>":"<span class='zero'>—</span>")+"</td></tr>";
+  sh+="<tr><td class='dim'><span class='dot kanko'></span>完工予定（注文・年間）</td>"+
+    "<td>"+fmtCnt(segB+segC)+"棟</td><td>"+fmtYen(kankoAmtTot)+"円</td><td>"+fmtYen(kankoProfTot)+"円</td>"+
+    "<td>"+(kankoMargin?fmtPct(kankoMargin):"–")+"</td>"+
+    "<td class='l'>受注残 "+segB+"棟＋今期契約 "+segC+"棟／金額=④工事請負代金・粗利=⑤建物粗利</td></tr>";
+  sh+="</tbody></table></div>";
+  secSum.innerHTML=sh;
+  main.appendChild(secSum);
 
   // ===== 全社（注文＋建売） =====
   const secAll = segwrap("company", "全社合計（注文＋建売）", year+"年・契約日基準");
