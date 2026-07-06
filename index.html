@@ -190,7 +190,10 @@
 // ===== 設定 =====
 const SHEET_ID = "1JVdBC-N_MPyJppIXu6I9AQpXd6goAHnu0uTuZgxBI70";
 const GID = "2059228612"; // 注文タブ
-const QUERY = "select G,H,K,M,N,P,S,T,V,AD,BD,AP,BJ"; // 工事番号,お客様名,営業,店舗,契約日,着工日予定,完工日予定,変更後完工日予定,状況,工事代金合計(税抜),建物粗利(税抜),工事請負代金(税抜),最終請負金額(税抜)
+// 注文タブはCSVエクスポートで取得（gvizと違い、シート側のフィルタで非表示の行も含む全行を取得できる）
+const CSV_URL_ORDERS = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/export?format=csv&gid=" + GID;
+// 注文タブのCSV列位置（A列=0）
+const OC = {no:6, customer:7, sales:10, store:12, contract:13, start:15, kankoPlan:18, kankoPlanRev:19, status:21, amount:29, workAmt:41, profit:55, finalAmt:61};
 const GID_TATEURI = "221902947"; // 建売タブ
 const QUERY_TATEURI = "select D,F,G,H,J,K,N,AK"; // 物件名,営業,店舗,契約日,引渡日,建物代金(税抜),土地代金,最終粗利(税抜)
 const LOW_MARGIN = 0.20; // 粗利率の警告しきい値（20%未満）
@@ -214,8 +217,67 @@ function loadData(){
   document.getElementById("main").innerHTML =
     '<div class="msg" id="loading">Googleスプレッドシートからデータを取得しています…</div>';
   ordersLoaded = false; tateuriLoaded = false;
-  gvizFetch(GID, QUERY, handleOrders);
+  fetch(CSV_URL_ORDERS, {cache:"no-store"})
+    .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.text(); })
+    .then(parseOrdersCsv)
+    .catch(function(e){ showError("注文タブの取得に失敗しました："+e.message); });
   gvizFetch(GID_TATEURI, QUERY_TATEURI, handleTateuri);
+}
+
+// ===== CSVパース =====
+function parseCsv(text){
+  const rows=[]; let row=[], field="", inQ=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(inQ){
+      if(ch==='"'){ if(text[i+1]==='"'){ field+='"'; i++; } else inQ=false; }
+      else field+=ch;
+    }else{
+      if(ch==='"') inQ=true;
+      else if(ch===","){ row.push(field); field=""; }
+      else if(ch==="\n"){ row.push(field); rows.push(row); row=[]; field=""; }
+      else if(ch!=="\r") field+=ch;
+    }
+  }
+  if(field!=="" || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+function parseCsvDate(s){
+  if(!s) return null;
+  const m=/^(\d{2,4})\/(\d{1,2})\/(\d{1,2})/.exec(String(s).trim());
+  if(!m) return null;
+  let y=+m[1]; if(y<100) y+=2000;
+  return new Date(y, +m[2]-1, +m[3]);
+}
+function csvNum(s){ const n=parseFloat(String(s).replace(/[^0-9.\-]/g,"")); return isNaN(n)?0:n; }
+function csvBlank(s){ return !/[0-9]/.test(String(s)); }
+
+function parseOrdersCsv(text){
+  const rows=parseCsv(text).slice(3); // 1〜3行目（タイトル・グループ見出し・列見出し）を除外
+  ROWS = rows.map(function(c){
+    const g=(i)=> c[i]!==undefined ? c[i] : "";
+    return {
+      no: str(g(OC.no)),
+      customer: str(g(OC.customer)),
+      sales: str(g(OC.sales)) || "(営業未設定)",
+      store: normStore(str(g(OC.store)) || "(店舗未設定)"),
+      contract: parseCsvDate(g(OC.contract)),
+      start: parseCsvDate(g(OC.start)), // 着工日予定 P
+      kankoPlan: parseCsvDate(g(OC.kankoPlan)),
+      kankoPlanRev: parseCsvDate(g(OC.kankoPlanRev)),
+      status: str(g(OC.status)),
+      amount: csvNum(g(OC.amount)),
+      amountBlank: csvBlank(g(OC.amount)),
+      profit: csvNum(g(OC.profit)),
+      profitBlank: csvBlank(g(OC.profit)),
+      workAmt: csvNum(g(OC.workAmt)), // 工事請負代金(税抜) AP
+      finalAmt: csvNum(g(OC.finalAmt)) // 最終請負金額(税抜) BJ（未確定は0）
+    };
+  }).filter(function(r){
+    return r.customer && r.customer.indexOf("お客様") === -1;
+  });
+  ordersLoaded = true;
+  afterLoad();
 }
 
 function gvizFetch(gid, query, onResp){
@@ -259,37 +321,6 @@ function respError(resp){
     return true;
   }
   return false;
-}
-
-function handleOrders(resp){
-  if(respError(resp)) return;
-  const rows = resp.table.rows || [];
-  ROWS = rows.map(function(r){
-    const c = r.c || [];
-    const cell = (x)=> c[x];
-    const g = (x)=> c[x] ? c[x].v : null;
-    return {
-      no: str(g(0)),
-      customer: str(g(1)),
-      sales: str(g(2)) || "(営業未設定)",
-      store: normStore(str(g(3)) || "(店舗未設定)"),
-      contract: parseGDate(g(4)),
-      start: parseGDate(g(5)), // 着工日予定 P
-      kankoPlan: parseGDate(g(6)),
-      kankoPlanRev: parseGDate(g(7)),
-      status: str(g(8)),
-      amount: num(g(9)),
-      amountBlank: isBlank(cell(9)),
-      profit: num(g(10)),
-      profitBlank: isBlank(cell(10)),
-      workAmt: num(g(11)), // 工事請負代金(税抜) AP
-      finalAmt: num(g(12)) // 最終請負金額(税抜) BJ（未確定は0）
-    };
-  }).filter(function(r){
-    return r.customer && r.customer.indexOf("お客様") === -1;
-  });
-  ordersLoaded = true;
-  afterLoad();
 }
 
 function handleTateuri(resp){
@@ -992,7 +1023,8 @@ function showError(msg){
 
 function renderFooter(){
   document.getElementById("footer").innerHTML =
-    "データ元：受注一覧表2026_New「注文」タブ・「建売」タブ（ライブ取得）。本ページを開く／再取得で最新化されます。<b>金額はすべて千円単位（税抜）</b>。<br>"+
+    "データ元：受注一覧表2026_New「注文」タブ・「建売」タブ（ライブ取得）。本ページを開く／再取得で最新化されます。<b>金額はすべて千円単位（税抜）</b>。"+
+    "注文タブはCSV取得のため<b>シート側のフィルタ操作の影響を受けません</b>（建売タブはフィルタで非表示の行が集計から外れる場合があります）。<br>"+
     "営業別表示では契約金額・契約粗利額は注文＋建売の合算で表示（店舗別表示では注文／建売を分けて表示）。<br>"+
     "店舗表示：「青森」「佃店」は石江店、「アエルホーム」は浜田・アエルに統合して集計。表示順は 石江店→浜田・アエル→弘前店→八戸店→盛岡店→その他。<br>"+
     "集計定義：①契約棟数(全社)=②請負契約棟数(注文)＋③売買契約棟数(建売)。<br>"+
