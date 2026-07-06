@@ -80,6 +80,21 @@
        padding:0 10px;min-width:fit-content;}
   .compbar .cseg.order{background:var(--accent);}
   .compbar .cseg.tateuri{background:var(--green);}
+  /* 月次推移チャート */
+  .legend{display:flex;gap:16px;padding:10px 16px 0;font-size:12px;color:var(--sub);}
+  .legend .lg{display:inline-flex;align-items:center;gap:5px;}
+  .legend .sw{width:11px;height:11px;border-radius:3px;display:inline-block;}
+  .legend .sw.order{background:var(--accent);}
+  .legend .sw.tateuri{background:var(--green);}
+  .chart{display:flex;gap:8px;align-items:stretch;padding:6px 16px 14px;}
+  .chart .col{flex:1;display:flex;flex-direction:column;align-items:center;min-width:0;}
+  .chart .cval{font-size:13px;font-weight:700;margin-bottom:4px;}
+  .chart .cval.zero{color:var(--zero);font-weight:400;}
+  .chart .barwrap{height:140px;width:100%;display:flex;align-items:flex-end;justify-content:center;}
+  .chart .cbar{width:60%;max-width:44px;display:flex;flex-direction:column;border-radius:5px 5px 0 0;overflow:hidden;}
+  .chart .seg-o{background:var(--accent);}
+  .chart .seg-t{background:var(--green);}
+  .chart .cmon{font-size:12px;color:var(--sub);margin-top:6px;border-top:2px solid var(--line);width:100%;text-align:center;padding-top:5px;}
   /* 冒頭サマリー */
   .block.summary h2{background:var(--head);color:#fff;}
   .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px;vertical-align:-1px;}
@@ -555,6 +570,35 @@ function renderSummary(){
   sh+="</tbody></table></div>";
   secSum.innerHTML=sh;
   main.appendChild(secSum);
+
+  // ===== 全社契約棟数 月次推移チャート =====
+  const mOrderCnt=new Array(12).fill(0), mTateCnt=new Array(12).fill(0);
+  ROWS.forEach(function(r){
+    if(r.contract && r.contract.getFullYear()===year && !isCancel(r)) mOrderCnt[r.contract.getMonth()]+=1;
+  });
+  TROWS.forEach(function(r){
+    if(r.contract && r.contract.getFullYear()===year) mTateCnt[r.contract.getMonth()]+=1;
+  });
+  const maxM=Math.max.apply(null, MONTHS.map(function(_,i){ return mOrderCnt[i]+mTateCnt[i]; }));
+  const secChart=document.createElement("section"); secChart.className="block";
+  let ch="<h2>全社契約棟数 月次推移（注文＋建売）／"+year+"年・契約日基準　単位:棟</h2>";
+  ch+="<div class='legend'><span class='lg'><span class='sw order'></span>注文</span>"+
+      "<span class='lg'><span class='sw tateuri'></span>建売</span></div>";
+  ch+="<div class='chart'>";
+  MONTHS.forEach(function(m,i){
+    const o=mOrderCnt[i], t=mTateCnt[i], tot=o+t;
+    const hPct = maxM>0 ? (tot/maxM*100) : 0;
+    ch+="<div class='col' title='"+m+"月：注文"+o+"棟＋建売"+t+"棟'>"+
+      "<div class='cval"+(tot===0?" zero":"")+"'>"+tot+"</div>"+
+      "<div class='barwrap'><div class='cbar' style='height:"+hPct+"%'>"+
+        (t>0?"<div class='seg-t' style='flex:"+t+"'></div>":"")+
+        (o>0?"<div class='seg-o' style='flex:"+o+"'></div>":"")+
+      "</div></div>"+
+      "<div class='cmon'>"+m+"月</div></div>";
+  });
+  ch+="</div>";
+  secChart.innerHTML=ch;
+  main.appendChild(secChart);
 
   // ===== 全社（注文＋建売） =====
   const secAll = segwrap("company", "全社合計（注文＋建売）", year+"年・契約日基準");
