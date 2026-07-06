@@ -88,8 +88,10 @@
   .legend .sw.tateuri{background:var(--green);}
   .chart{display:flex;gap:8px;align-items:stretch;padding:6px 16px 14px;}
   .chart .col{flex:1;display:flex;flex-direction:column;align-items:center;min-width:0;}
-  .chart .cval{font-size:13px;font-weight:700;margin-bottom:4px;}
+  .chart .cval{font-size:13px;font-weight:700;}
   .chart .cval.zero{color:var(--zero);font-weight:400;}
+  .chart .camt{font-size:10.5px;color:var(--sub);margin-bottom:4px;white-space:nowrap;}
+  .chart .camt.blank{visibility:hidden;}
   .chart .barwrap{height:140px;width:100%;display:flex;align-items:flex-end;justify-content:center;}
   .chart .cbar{width:60%;max-width:44px;display:flex;flex-direction:column;border-radius:5px 5px 0 0;overflow:hidden;}
   .chart .seg-o{background:var(--accent);}
@@ -572,24 +574,30 @@ function renderSummary(){
   main.appendChild(secSum);
 
   // ===== 全社契約棟数 月次推移チャート =====
-  const mOrderCnt=new Array(12).fill(0), mTateCnt=new Array(12).fill(0);
+  const mOrderCnt=new Array(12).fill(0), mTateCnt=new Array(12).fill(0), mOrderAmt=new Array(12).fill(0);
   ROWS.forEach(function(r){
-    if(r.contract && r.contract.getFullYear()===year && !isCancel(r)) mOrderCnt[r.contract.getMonth()]+=1;
+    if(r.contract && r.contract.getFullYear()===year && !isCancel(r)){
+      mOrderCnt[r.contract.getMonth()]+=1;
+      mOrderAmt[r.contract.getMonth()]+=r.workAmt;
+    }
   });
   TROWS.forEach(function(r){
     if(r.contract && r.contract.getFullYear()===year) mTateCnt[r.contract.getMonth()]+=1;
   });
+  const fmtSen=function(n){ return Math.round(n/1000).toLocaleString("ja-JP")+"千円"; };
   const maxM=Math.max.apply(null, MONTHS.map(function(_,i){ return mOrderCnt[i]+mTateCnt[i]; }));
   const secChart=document.createElement("section"); secChart.className="block";
   let ch="<h2>全社契約棟数 月次推移（注文＋建売）／"+year+"年・契約日基準　単位:棟</h2>";
+  ch+="<div class='note'>棒の上段＝契約棟数（全社）、下段＝請負契約金額（注文・税抜・千円）。</div>";
   ch+="<div class='legend'><span class='lg'><span class='sw order'></span>注文</span>"+
       "<span class='lg'><span class='sw tateuri'></span>建売</span></div>";
   ch+="<div class='chart'>";
   MONTHS.forEach(function(m,i){
     const o=mOrderCnt[i], t=mTateCnt[i], tot=o+t;
     const hPct = maxM>0 ? (tot/maxM*100) : 0;
-    ch+="<div class='col' title='"+m+"月：注文"+o+"棟＋建売"+t+"棟'>"+
-      "<div class='cval"+(tot===0?" zero":"")+"'>"+tot+"</div>"+
+    ch+="<div class='col' title='"+m+"月：注文"+o+"棟＋建売"+t+"棟／請負契約金額 "+fmtSen(mOrderAmt[i])+"'>"+
+      "<div class='cval"+(tot===0?" zero":"")+"'>"+tot+"棟</div>"+
+      "<div class='camt"+(mOrderAmt[i]>0?"":" blank")+"'>"+fmtSen(mOrderAmt[i])+"</div>"+
       "<div class='barwrap'><div class='cbar' style='height:"+hPct+"%'>"+
         (t>0?"<div class='seg-t' style='flex:"+t+"'></div>":"")+
         (o>0?"<div class='seg-o' style='flex:"+o+"'></div>":"")+
@@ -599,6 +607,39 @@ function renderSummary(){
   ch+="</div>";
   secChart.innerHTML=ch;
   main.appendChild(secChart);
+
+  // ===== 全社完工棟数 月次推移チャート =====
+  const mKankoCnt=new Array(12).fill(0), mHandCnt=new Array(12).fill(0);
+  ROWS.forEach(function(r){
+    if(isCancel(r)) return;
+    const e=effKanko(r);
+    if(e && e.getFullYear()===year) mKankoCnt[e.getMonth()]+=1;
+  });
+  TROWS.forEach(function(r){
+    if(r.handover && r.handover.getFullYear()===year) mHandCnt[r.handover.getMonth()]+=1;
+  });
+  const maxK=Math.max.apply(null, MONTHS.map(function(_,i){ return mKankoCnt[i]+mHandCnt[i]; }));
+  const secChartK=document.createElement("section"); secChartK.className="block";
+  let ck="<h2>全社完工棟数 月次推移（注文＋建売）／"+year+"年　単位:棟</h2>";
+  ck+="<div class='note'>注文＝変更後完工日予定（無ければ完工日予定）・キャンセル除外、建売＝引渡日の月で計上。</div>";
+  ck+="<div class='legend'><span class='lg'><span class='sw order'></span>注文（完工予定）</span>"+
+      "<span class='lg'><span class='sw tateuri'></span>建売（引渡）</span></div>";
+  ck+="<div class='chart'>";
+  MONTHS.forEach(function(m,i){
+    const o=mKankoCnt[i], t=mHandCnt[i], tot=o+t;
+    const hPct = maxK>0 ? (tot/maxK*100) : 0;
+    ck+="<div class='col' title='"+m+"月：注文"+o+"棟＋建売"+t+"棟'>"+
+      "<div class='cval"+(tot===0?" zero":"")+"'>"+tot+"棟</div>"+
+      "<div class='camt blank'>-</div>"+
+      "<div class='barwrap'><div class='cbar' style='height:"+hPct+"%'>"+
+        (t>0?"<div class='seg-t' style='flex:"+t+"'></div>":"")+
+        (o>0?"<div class='seg-o' style='flex:"+o+"'></div>":"")+
+      "</div></div>"+
+      "<div class='cmon'>"+m+"月</div></div>";
+  });
+  ck+="</div>";
+  secChartK.innerHTML=ck;
+  main.appendChild(secChartK);
 
   // ===== 全社（注文＋建売） =====
   const secAll = segwrap("company", "全社合計（注文＋建売）", year+"年・契約日基準");
