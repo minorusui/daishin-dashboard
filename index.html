@@ -11,6 +11,7 @@
     --cancel:#9a3412; --cancelbg:#fff3ec; --total:#f2f6fb; --zero:#c8cdd4;
     --err:#b42318; --errbg:#fdecea; --warn:#92600a; --warnbg:#fff7e6;
     --backlog:#5b21b6; --backlogbg:#f3eefc; --cur:#0e7490; --curbg:#e8f6fa;
+    --green:#0f8a57; --greenbg:#e9f6ef;
   }
   *{box-sizing:border-box;}
   body{margin:0;font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Meiryo",sans-serif;
@@ -45,6 +46,40 @@
   .kpi .t{font-size:12px;color:var(--sub);}
   .kpi .v{font-size:22px;font-weight:700;margin-top:4px;}
   .kpi .u{font-size:12px;color:var(--sub);font-weight:400;margin-left:3px;}
+  .kpi.hero{background:var(--head);border-color:var(--head);}
+  .kpi.hero .t{color:#cfe0f2;font-weight:600;}
+  .kpi.hero .v{font-size:30px;color:#fff;}
+  .kpi.hero .u{color:#cfe0f2;}
+  .kpi.k-order{border-top:4px solid var(--accent);}
+  .kpi.k-order .t{color:var(--accent);font-weight:700;}
+  .kpi.k-tateuri{border-top:4px solid var(--green);}
+  .kpi.k-tateuri .t{color:var(--green);font-weight:700;}
+  /* 事業セクション（全社／注文／建売） */
+  .seghead{display:flex;align-items:baseline;gap:12px;margin:2px 0 12px;
+       padding:10px 16px;border-radius:10px;color:#fff;}
+  .seghead .seg-title{font-size:15px;font-weight:700;letter-spacing:.02em;}
+  .seghead .seg-sub{font-size:12px;opacity:.85;}
+  .seghead.company{background:linear-gradient(90deg,var(--head),#1763a6);}
+  .seghead.order{background:var(--accent);}
+  .seghead.tateuri{background:var(--green);}
+  .segwrap{margin-bottom:34px;}
+  .segwrap.order .block h2{background:var(--accentbg);color:var(--accent);box-shadow:inset 4px 0 var(--accent);}
+  .segwrap.tateuri .block h2{background:var(--greenbg);color:var(--green);box-shadow:inset 4px 0 var(--green);}
+  .segwrap.company .block h2{box-shadow:inset 4px 0 var(--head);}
+  .segwrap.order .kpi{border-top:4px solid var(--accent);}
+  .segwrap.tateuri .kpi{border-top:4px solid var(--green);}
+  .segwrap .kpi.flag{border-color:var(--warn);border-top-color:var(--warn);background:var(--warnbg);}
+  .segwrap .kpi.backlog{border-color:var(--backlog);border-top-color:var(--backlog);background:var(--backlogbg);}
+  .segwrap .kpi.cur{border-color:var(--cur);border-top-color:var(--cur);background:var(--curbg);}
+  .segwrap .block.cancel h2{background:var(--cancelbg);color:var(--cancel);box-shadow:inset 4px 0 var(--cancel);}
+  .segwrap .block.seg h2{background:#efeafb;color:var(--backlog);box-shadow:inset 4px 0 var(--backlog);}
+  .kpis-label{font-size:12px;font-weight:700;color:var(--sub);margin:16px 2px 8px;letter-spacing:.05em;}
+  .compbar{display:flex;height:36px;border-radius:9px;overflow:hidden;margin:0 0 18px;
+       border:1px solid var(--line);font-size:12px;font-weight:700;color:#fff;}
+  .compbar .cseg{display:flex;align-items:center;justify-content:center;white-space:nowrap;
+       padding:0 10px;min-width:fit-content;}
+  .compbar .cseg.order{background:var(--accent);}
+  .compbar .cseg.tateuri{background:var(--green);}
   section.block{background:var(--card);border:1px solid var(--line);border-radius:12px;
        margin-bottom:18px;overflow:hidden;}
   .block h2{margin:0;padding:11px 16px;font-size:14px;background:var(--accentbg);
@@ -422,49 +457,91 @@ function renderSummary(){
   const kankoAmtTot=sumAll(agg.kankoAmount), kankoProfTot=sumAll(agg.kankoProfit);
   const kankoMargin = kankoAmtTot>0 ? kankoProfTot/kankoAmtTot : 0;
 
-  const kpis=document.createElement("div"); kpis.className="kpis";
-  kpis.innerHTML =
-    kpi("①契約棟数(全社)", fmtCnt(sumCnt+tCntSum), "棟","") +
-    kpi("②請負契約棟数(注文)", fmtCnt(sumCnt), "棟","") +
-    kpi("③売買契約棟数(建売)", fmtCnt(tCntSum), "棟","") +
-    kpi("請負契約金額(注文・税抜)", fmtYen(sumAmt), "円","") +
-    kpi("請負契約粗利額(注文・税抜)", fmtYen(sumProf), "円","") +
-    kpi("売買契約金額(建売・税抜)", fmtYen(tAmtSum), "円","") +
-    kpi("売買契約粗利額(建売・税抜)", fmtYen(tProfSum), "円","") +
-    kpi("契約粗利率(注文・入力済のみ)", trueMargin?fmtPct(trueMargin):"–", "","") +
-    kpi("粗利未入力(注文)", fmtCnt(blankProfit), "棟", blankProfit>0?"flag":"") +
-    kpi("粗利未入力(建売)", fmtCnt(tBlankProfit), "棟", tBlankProfit>0?"flag":"") +
-    kpi("完工予定棟数(注文・年間合計)", fmtCnt(segB+segC), "棟","") +
+  // ===== 全社（注文＋建売） =====
+  const secAll = segwrap("company", "全社合計（注文＋建売）", year+"年・契約日基準");
+  const kAll=document.createElement("div"); kAll.className="kpis";
+  kAll.innerHTML =
+    kpi("①契約棟数(全社)＝②＋③", fmtCnt(sumCnt+tCntSum), "棟","hero") +
+    kpi("②請負契約棟数(注文)", fmtCnt(sumCnt), "棟","k-order") +
+    kpi("③売買契約棟数(建売)", fmtCnt(tCntSum), "棟","k-tateuri");
+  secAll.appendChild(kAll);
+  const totalCnt=sumCnt+tCntSum;
+  if(totalCnt>0){
+    const cb=document.createElement("div"); cb.className="compbar";
+    const po=Math.round(sumCnt/totalCnt*100);
+    cb.innerHTML =
+      (sumCnt>0?"<div class='cseg order' style='width:"+po+"%'>注文 "+sumCnt+"棟（"+po+"%）</div>":"")+
+      (tCntSum>0?"<div class='cseg tateuri' style='width:"+(100-po)+"%'>建売 "+tCntSum+"棟（"+(100-po)+"%）</div>":"");
+    secAll.appendChild(cb);
+  }
+  secAll.appendChild(buildMatrix("① 契約棟数（全社＝注文＋建売）／契約日基準　単位:棟", agg.allCount, order, fmtCnt, false));
+  main.appendChild(secAll);
+
+  // ===== 注文事業（請負契約） =====
+  const secOrder = segwrap("order", "注文事業（請負契約）", year+"年・契約日基準・キャンセル除外");
+  const kO=document.createElement("div"); kO.className="kpis";
+  kO.innerHTML =
+    kpi("②請負契約棟数", fmtCnt(sumCnt), "棟","") +
+    kpi("請負契約金額(税抜)", fmtYen(sumAmt), "円","") +
+    kpi("請負契約粗利額(税抜)", fmtYen(sumProf), "円","") +
+    kpi("契約粗利率(入力済のみ)", trueMargin?fmtPct(trueMargin):"–", "","") +
+    kpi("粗利未入力", fmtCnt(blankProfit), "棟", blankProfit>0?"flag":"") +
+    kpi("キャンセル棟数", fmtCnt(sumCancel), "棟","");
+  secOrder.appendChild(kO);
+  if(blankProfit>0){
+    const note=document.createElement("section"); note.className="block";
+    note.innerHTML="<div class='note'>※ 当年契約のうち <b>"+blankProfit+"棟</b> が建物粗利(税抜)未入力です。"+
+      "未入力分は粗利額に0として合算されるため、実際の粗利はこれより大きい可能性があります。内訳は「物件一覧（粗利分析）」タブで確認できます。</div>";
+    secOrder.appendChild(note);
+  }
+  secOrder.appendChild(buildMatrix("② 請負契約棟数／契約日基準　単位:棟", agg.count, order, fmtCnt, false));
+  secOrder.appendChild(buildMatrix("請負契約金額（税抜）／契約日基準　単位:円", agg.amount, order, fmtYen, false));
+  secOrder.appendChild(buildMatrix("請負契約粗利額（税抜）／契約日基準　単位:円", agg.profit, order, fmtYen, false));
+
+  const lblK=document.createElement("div"); lblK.className="kpis-label";
+  lblK.textContent="▼ 完工予定（注文）"; secOrder.appendChild(lblK);
+  const kK=document.createElement("div"); kK.className="kpis";
+  kK.innerHTML =
+    kpi("完工予定棟数(年間合計)", fmtCnt(segB+segC), "棟","") +
     kpi("　うち受注残", fmtCnt(segB), "棟","backlog") +
     kpi("　うち今期契約", fmtCnt(segC), "棟","cur") +
     kpi("④完工予定 工事請負代金(税抜)", fmtYen(kankoAmtTot), "円","") +
     kpi("⑤完工予定 建物粗利(税抜)", fmtYen(kankoProfTot), "円","") +
-    kpi("完工予定 粗利率", kankoMargin?fmtPct(kankoMargin):"–", "","") +
-    kpi("キャンセル棟数(注文)", fmtCnt(sumCancel), "棟","");
-  main.appendChild(kpis);
+    kpi("完工予定 粗利率", kankoMargin?fmtPct(kankoMargin):"–", "","");
+  secOrder.appendChild(kK);
+  secOrder.appendChild(buildMatrix("④ 完工予定 工事請負代金（税抜）／"+year+"年完工・変更後完工日予定優先・キャンセル除外　単位:円", agg.kankoAmount, order, fmtYen, false));
+  secOrder.appendChild(buildMatrix("⑤ 完工予定 建物粗利（税抜）／"+year+"年完工・変更後完工日予定優先・キャンセル除外　単位:円", agg.kankoProfit, order, fmtYen, false));
+  secOrder.appendChild(buildMatrix("完工予定棟数（月別）／変更後完工日予定優先・キャンセル除外　単位:棟", agg.kanko, order, fmtCnt, false));
+  secOrder.appendChild(buildSegBlock(year, agg, order));
+  secOrder.appendChild(buildMatrix("キャンセル棟数／契約日基準　単位:棟", agg.cancel, order, fmtCnt, true));
+  main.appendChild(secOrder);
 
-  if(blankProfit>0 || tBlankProfit>0){
+  // ===== 建売事業（売買契約） =====
+  const secT = segwrap("tateuri", "建売事業（売買契約）", year+"年・契約日基準");
+  const kT=document.createElement("div"); kT.className="kpis";
+  kT.innerHTML =
+    kpi("③売買契約棟数", fmtCnt(tCntSum), "棟","") +
+    kpi("売買契約金額(税抜)", fmtYen(tAmtSum), "円","") +
+    kpi("売買契約粗利額(最終粗利・税抜)", fmtYen(tProfSum), "円","") +
+    kpi("粗利未入力", fmtCnt(tBlankProfit), "棟", tBlankProfit>0?"flag":"");
+  secT.appendChild(kT);
+  if(tBlankProfit>0){
     const note=document.createElement("section"); note.className="block";
-    let ntxt="※ ";
-    if(blankProfit>0) ntxt+="注文：当年契約のうち <b>"+blankProfit+"棟</b> が建物粗利(税抜)未入力（内訳は「物件一覧（粗利分析）」タブ）。";
-    if(tBlankProfit>0) ntxt+="建売：当年契約のうち <b>"+tBlankProfit+"棟</b> が最終粗利(税抜)未入力。";
-    ntxt+="未入力分は粗利額に0として合算されるため、実際の粗利はこれより大きい可能性があります。";
-    note.innerHTML="<div class='note'>"+ntxt+"</div>";
-    main.appendChild(note);
+    note.innerHTML="<div class='note'>※ 当年契約のうち <b>"+tBlankProfit+"棟</b> が最終粗利(税抜)未入力です。"+
+      "未入力分は粗利額に0として合算されるため、実際の粗利はこれより大きい可能性があります。</div>";
+    secT.appendChild(note);
   }
+  secT.appendChild(buildMatrix("③ 売買契約棟数／契約日基準　単位:棟", agg.tCount, order, fmtCnt, false));
+  secT.appendChild(buildMatrix("売買契約金額（税抜＝建物代金＋土地代金）／契約日基準　単位:円", agg.tAmount, order, fmtYen, false));
+  secT.appendChild(buildMatrix("売買契約粗利額（最終粗利・税抜）／契約日基準　単位:円", agg.tProfit, order, fmtYen, false));
+  main.appendChild(secT);
+}
 
-  main.appendChild(buildMatrix("① 契約棟数（全社＝注文＋建売）／契約日基準　単位:棟", agg.allCount, order, fmtCnt, false));
-  main.appendChild(buildMatrix("② 請負契約棟数（注文）／契約日基準　単位:棟", agg.count, order, fmtCnt, false));
-  main.appendChild(buildMatrix("③ 売買契約棟数（建売）／契約日基準　単位:棟", agg.tCount, order, fmtCnt, false));
-  main.appendChild(buildMatrix("請負契約金額（注文・税抜）／契約日基準　単位:円", agg.amount, order, fmtYen, false));
-  main.appendChild(buildMatrix("請負契約粗利額（注文・税抜）／契約日基準　単位:円", agg.profit, order, fmtYen, false));
-  main.appendChild(buildMatrix("売買契約金額（建売・税抜＝建物代金＋土地代金）／契約日基準　単位:円", agg.tAmount, order, fmtYen, false));
-  main.appendChild(buildMatrix("売買契約粗利額（建売・最終粗利(税抜)）／契約日基準　単位:円", agg.tProfit, order, fmtYen, false));
-  main.appendChild(buildMatrix("④ 完工予定 工事請負代金（税抜）／"+year+"年完工・変更後完工日予定優先・キャンセル除外　単位:円", agg.kankoAmount, order, fmtYen, false));
-  main.appendChild(buildMatrix("⑤ 完工予定 建物粗利（税抜）／"+year+"年完工・変更後完工日予定優先・キャンセル除外　単位:円", agg.kankoProfit, order, fmtYen, false));
-  main.appendChild(buildMatrix("完工予定棟数（月別）／変更後完工日予定優先・キャンセル除外　単位:棟", agg.kanko, order, fmtCnt, false));
-  main.appendChild(buildSegBlock(year, agg, order));
-  main.appendChild(buildMatrix("キャンセル棟数／契約日基準　単位:棟", agg.cancel, order, fmtCnt, true));
+function segwrap(cls, title, sub){
+  const w=document.createElement("div"); w.className="segwrap "+cls;
+  w.innerHTML="<div class='seghead "+cls+"'><span class='seg-title'>"+title+"</span>"+
+    (sub?"<span class='seg-sub'>"+sub+"</span>":"")+"</div>";
+  return w;
 }
 
 // ===== 物件一覧（粗利分析）ビュー =====
