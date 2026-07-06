@@ -250,7 +250,7 @@ function aggregate(year){
     if(r.contract && r.contract.getFullYear()===year){
       const m=r.contract.getMonth(); keys.add(k);
       if(isCancel(r)){ ensure(cancel,k)[m]+=1; }
-      else{ ensure(amount,k)[m]+=r.amount; ensure(count,k)[m]+=1; ensure(profit,k)[m]+=r.profit; }
+      else{ ensure(amount,k)[m]+=r.workAmt; ensure(count,k)[m]+=1; ensure(profit,k)[m]+=r.profit; }
     }
     if(!isCancel(r)){
       const e=effKanko(r);
@@ -345,7 +345,7 @@ function renderSummary(){
   let sumAmt=0,sumCnt=0,sumProf=0,sumCancel=0,amtForRatio=0,profForRatio=0,blankProfit=0;
   ROWS.forEach(function(r){
     if(r.contract && r.contract.getFullYear()===year && !isCancel(r)){
-      sumAmt+=r.amount; sumCnt+=1; sumProf+=r.profit;
+      sumAmt+=r.workAmt; sumCnt+=1; sumProf+=r.profit;
       if(r.profitBlank && !r.amountBlank && r.amount>0) blankProfit+=1;
       if(!r.profitBlank && !r.amountBlank && r.amount>0){ amtForRatio+=r.amount; profForRatio+=r.profit; }
     }
@@ -512,7 +512,7 @@ function showError(msg){
 function renderFooter(){
   document.getElementById("footer").innerHTML =
     "データ元：受注一覧表2026_New「注文」タブ（ライブ取得）。本ページを開く／再取得で最新化されます。<br>"+
-    "集計定義：①請負契約金額=工事代金合計(税抜)／②請負契約棟数／③契約粗利額=建物粗利(税抜) は<b>契約日</b>の月で計上、キャンセルを除外。"+
+    "集計定義：①請負契約金額=工事請負代金(税抜)（AP列）／②請負契約棟数／③契約粗利額=建物粗利(税抜) は<b>契約日</b>の月で計上、キャンセルを除外。"+
     "④完工予定 工事請負代金(税抜)・⑤完工予定 建物粗利(税抜)・完工予定棟数は、<b>変更後完工日予定（無ければ完工日予定）が対象年</b>の物件を計上、キャンセル除外（④=AP列、⑤=BD列）。<br>"+
     "完工予定区分：<b>受注残</b>=契約年が完工予定年より前（前期以前契約の当期完工）、<b>今期契約</b>=契約年が完工予定年と同年。年間完工予定合計＝受注残＋今期契約。"+
     "粗利率=建物粗利(税抜)÷工事代金合計(税抜)。粗利・金額が未入力の物件は率計算から除外し『要確認』表示。";
