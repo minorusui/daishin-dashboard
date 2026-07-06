@@ -105,6 +105,9 @@
   td.l{text-align:left;}
   tr.total td{background:var(--total);font-weight:700;border-top:2px solid var(--line);}
   tr.total td.dim{background:var(--total);}
+  tr.subtotal td{background:var(--accentbg);font-weight:700;border-top:2px solid var(--line);}
+  tr.subtotal td.dim{background:var(--accentbg);color:var(--head);}
+  td.dim .member{display:inline-block;padding-left:18px;font-weight:500;}
   td.col-total{background:var(--total);font-weight:600;}
   td.c-backlog{background:var(--backlogbg);} th.c-backlog{background:#efeafb;color:var(--backlog);}
   td.c-cur{background:var(--curbg);} th.c-cur{background:#e2f1f5;color:var(--cur);}
@@ -298,6 +301,8 @@ function afterLoad(){
 }
 
 function isCancel(r){ return r.status.indexOf("キャンセル") !== -1; }
+// 集計キー：店舗別=店舗、営業別=店舗+営業の組（営業別表示で店舗小計を出すため）
+function dimKey(r){ return dim==="store" ? r.store : r.store+"\x1f"+r.sales; }
 function effKanko(r){ return r.kankoPlanRev || r.kankoPlan; }
 function ratioOf(r){
   if(r.profitBlank || r.amountBlank || r.amount<=0) return null;
@@ -339,7 +344,7 @@ function aggregate(year){
   const ensure=(o,k)=>{ if(!o[k]) o[k]=new Array(12).fill(0); return o[k]; };
   const inc=(o,k)=>{ o[k]=(o[k]||0)+1; };
   ROWS.forEach(function(r){
-    const k=(dim==="store")?r.store:r.sales;
+    const k=dimKey(r);
     if(r.contract && r.contract.getFullYear()===year){
       const m=r.contract.getMonth(); keys.add(k);
       if(isCancel(r)){ ensure(cancel,k)[m]+=1; }
@@ -358,7 +363,7 @@ function aggregate(year){
   });
   TROWS.forEach(function(r){
     if(!(r.contract && r.contract.getFullYear()===year)) return;
-    const k=(dim==="store")?r.store:r.sales;
+    const k=dimKey(r);
     const m=r.contract.getMonth(); keys.add(k);
     ensure(tAmount,k)[m]+=r.amount; ensure(tCount,k)[m]+=1; ensure(tProfit,k)[m]+=r.profit;
     ensure(allCount,k)[m]+=1;
@@ -400,17 +405,44 @@ function buildMatrix(title, data, order, fmt, cancelClass){
   const sec=document.createElement("section");
   sec.className="block"+(cancelClass?" cancel":"");
   let html="<h2>"+title+"</h2><div class='scroll'><table><thead><tr>";
-  html+="<th class='dim'>"+(dim==="store"?"店舗":"営業")+"</th>";
+  html+="<th class='dim'>"+(dim==="store"?"店舗":"店舗／営業")+"</th>";
   MONTHS.forEach(m=>html+="<th>"+m+"月</th>");
   html+="<th class='col-total'>合計</th></tr></thead><tbody>";
   const colTotals=new Array(12).fill(0); let grand=0;
-  order.forEach(function(k){
-    const arr=data[k]||new Array(12).fill(0); const rt=rowTotal(arr);
-    if(rt===0) return;
-    html+="<tr><td class='dim'>"+escapeHtml(k)+"</td>";
-    arr.forEach((v,i)=>{ colTotals[i]+=v; html+="<td>"+fmt(v)+"</td>"; });
-    html+="<td class='col-total'>"+fmt(rt)+"</td></tr>"; grand+=rt;
-  });
+  function rowHtml(label, arr, cls, addToTotals){
+    const rt=rowTotal(arr);
+    let h="<tr"+(cls?" class='"+cls+"'":"")+"><td class='dim'>"+label+"</td>";
+    arr.forEach(function(v,i){ if(addToTotals) colTotals[i]+=v; h+="<td>"+fmt(v)+"</td>"; });
+    h+="<td class='col-total'>"+fmt(rt)+"</td></tr>";
+    if(addToTotals) grand+=rt;
+    return h;
+  }
+  if(dim==="sales"){
+    // 店舗ごとにグループ化し、店舗小計行＋所属営業の行を出す
+    const groups={}, gOrder=[];
+    order.forEach(function(k){
+      const p=k.split("\x1f"); const st=p[0], sa=p.length>1?p[1]:k;
+      if(!groups[st]){ groups[st]=[]; gOrder.push(st); }
+      groups[st].push({key:k, sales:sa});
+    });
+    gOrder.forEach(function(st){
+      const sub=new Array(12).fill(0);
+      groups[st].forEach(function(m){ (data[m.key]||[]).forEach(function(v,i){ sub[i]+=v; }); });
+      if(rowTotal(sub)===0) return;
+      html+=rowHtml(escapeHtml(st)+"　計", sub, "subtotal", true);
+      groups[st].forEach(function(m){
+        const arr=data[m.key]||new Array(12).fill(0);
+        if(rowTotal(arr)===0) return;
+        html+=rowHtml("<span class='member'>"+escapeHtml(m.sales)+"</span>", arr, "", false);
+      });
+    });
+  }else{
+    order.forEach(function(k){
+      const arr=data[k]||new Array(12).fill(0);
+      if(rowTotal(arr)===0) return;
+      html+=rowHtml(escapeHtml(k), arr, "", true);
+    });
+  }
   html+="<tr class='total'><td class='dim'>全社合計</td>";
   colTotals.forEach(v=>html+="<td>"+fmt(v)+"</td>");
   html+="<td class='col-total'>"+fmt(grand)+"</td></tr></tbody></table></div>";
@@ -423,14 +455,36 @@ function buildSegBlock(year, agg, order){
   const totB=sumScalar(agg.segBacklog), totC=sumScalar(agg.segCurrent);
   let html="<h2>完工予定物件 区分別（"+year+"年完工・キャンセル除外）　単位:棟</h2>";
   html+="<div class='note'>年間完工予定合計 <b>"+(totB+totC)+"棟</b> ＝ 受注残（前期以前契約） <b style='color:var(--backlog)'>"+totB+"棟</b> ＋ 今期契約・今期完工 <b style='color:var(--cur)'>"+totC+"棟</b></div>";
-  html+="<div class='scroll'><table><thead><tr><th class='dim'>"+(dim==="store"?"店舗":"営業")+"</th>"+
+  html+="<div class='scroll'><table><thead><tr><th class='dim'>"+(dim==="store"?"店舗":"店舗／営業")+"</th>"+
         "<th class='c-backlog'>受注残<br>(前期以前契約)</th><th class='c-cur'>今期契約<br>今期完工</th><th class='col-total'>完工予定合計</th></tr></thead><tbody>";
-  order.forEach(function(k){
-    const b=agg.segBacklog[k]||0, c=agg.segCurrent[k]||0; if(b+c===0) return;
-    html+="<tr><td class='dim'>"+escapeHtml(k)+"</td>"+
+  const segRow=function(label,b,c,cls){
+    return "<tr"+(cls?" class='"+cls+"'":"")+"><td class='dim'>"+label+"</td>"+
           "<td class='c-backlog'>"+fmtCnt(b)+"</td><td class='c-cur'>"+fmtCnt(c)+"</td>"+
           "<td class='col-total'>"+fmtCnt(b+c)+"</td></tr>";
-  });
+  };
+  if(dim==="sales"){
+    const groups={}, gOrder=[];
+    order.forEach(function(k){
+      const p=k.split("\x1f"); const st=p[0], sa=p.length>1?p[1]:k;
+      if(!groups[st]){ groups[st]=[]; gOrder.push(st); }
+      groups[st].push({key:k, sales:sa});
+    });
+    gOrder.forEach(function(st){
+      let sb=0, sc=0;
+      groups[st].forEach(function(m){ sb+=agg.segBacklog[m.key]||0; sc+=agg.segCurrent[m.key]||0; });
+      if(sb+sc===0) return;
+      html+=segRow(escapeHtml(st)+"　計", sb, sc, "subtotal");
+      groups[st].forEach(function(m){
+        const b=agg.segBacklog[m.key]||0, c=agg.segCurrent[m.key]||0; if(b+c===0) return;
+        html+=segRow("<span class='member'>"+escapeHtml(m.sales)+"</span>", b, c, "");
+      });
+    });
+  }else{
+    order.forEach(function(k){
+      const b=agg.segBacklog[k]||0, c=agg.segCurrent[k]||0; if(b+c===0) return;
+      html+=segRow(escapeHtml(k), b, c, "");
+    });
+  }
   html+="<tr class='total'><td class='dim'>全社合計</td><td class='c-backlog'>"+fmtCnt(totB)+
         "</td><td class='c-cur'>"+fmtCnt(totC)+"</td><td class='col-total'>"+fmtCnt(totB+totC)+"</td></tr>";
   html+="</tbody></table></div>"; sec.innerHTML=html; return sec;
