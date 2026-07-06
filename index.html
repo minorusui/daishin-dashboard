@@ -153,6 +153,7 @@
 <div class="tabbar">
   <button id="tabSummary" class="on">集計ダッシュボード</button>
   <button id="tabDetail">物件一覧（粗利分析）</button>
+  <button id="tabAlert">アラート</button>
 </div>
 
 <div class="bar">
@@ -189,7 +190,7 @@
 // ===== 設定 =====
 const SHEET_ID = "1JVdBC-N_MPyJppIXu6I9AQpXd6goAHnu0uTuZgxBI70";
 const GID = "2059228612"; // 注文タブ
-const QUERY = "select G,H,K,M,N,S,T,V,AD,BD,AP,BJ"; // 工事番号,お客様名,営業,店舗,契約日,完工日予定,変更後完工日予定,状況,工事代金合計(税抜),建物粗利(税抜),工事請負代金(税抜),最終請負金額(税抜)
+const QUERY = "select G,H,K,M,N,P,S,T,V,AD,BD,AP,BJ"; // 工事番号,お客様名,営業,店舗,契約日,着工日予定,完工日予定,変更後完工日予定,状況,工事代金合計(税抜),建物粗利(税抜),工事請負代金(税抜),最終請負金額(税抜)
 const GID_TATEURI = "221902947"; // 建売タブ
 const QUERY_TATEURI = "select D,F,G,H,J,K,N,AK"; // 物件名,営業,店舗,契約日,引渡日,建物代金(税抜),土地代金,最終粗利(税抜)
 const LOW_MARGIN = 0.20; // 粗利率の警告しきい値（20%未満）
@@ -273,15 +274,16 @@ function handleOrders(resp){
       sales: str(g(2)) || "(営業未設定)",
       store: normStore(str(g(3)) || "(店舗未設定)"),
       contract: parseGDate(g(4)),
-      kankoPlan: parseGDate(g(5)),
-      kankoPlanRev: parseGDate(g(6)),
-      status: str(g(7)),
-      amount: num(g(8)),
-      amountBlank: isBlank(cell(8)),
-      profit: num(g(9)),
-      profitBlank: isBlank(cell(9)),
-      workAmt: num(g(10)), // 工事請負代金(税抜) AP
-      finalAmt: num(g(11)) // 最終請負金額(税抜) BJ（未確定は0）
+      start: parseGDate(g(5)), // 着工日予定 P
+      kankoPlan: parseGDate(g(6)),
+      kankoPlanRev: parseGDate(g(7)),
+      status: str(g(8)),
+      amount: num(g(9)),
+      amountBlank: isBlank(cell(9)),
+      profit: num(g(10)),
+      profitBlank: isBlank(cell(10)),
+      workAmt: num(g(11)), // 工事請負代金(税抜) AP
+      finalAmt: num(g(12)) // 最終請負金額(税抜) BJ（未確定は0）
     };
   }).filter(function(r){
     return r.customer && r.customer.indexOf("お客様") === -1;
@@ -418,6 +420,7 @@ function setView(v){
   view=v;
   document.getElementById("tabSummary").classList.toggle("on", v==="summary");
   document.getElementById("tabDetail").classList.toggle("on", v==="detail");
+  document.getElementById("tabAlert").classList.toggle("on", v==="alert");
   document.getElementById("ctlAxis").style.display    = (v==="summary")?"flex":"none";
   document.getElementById("ctlBasis").style.display   = (v==="detail")?"flex":"none";
   document.getElementById("ctlOnlyFlag").style.display = (v==="detail")?"inline-flex":"none";
@@ -427,6 +430,7 @@ function setView(v){
 
 function render(){
   if(view==="summary") renderSummary();
+  else if(view==="alert") renderAlert();
   else renderDetail();
   renderFooter();
 }
@@ -879,6 +883,102 @@ function renderDetail(){
   dh+="</tbody></table></div>"; det.innerHTML=dh; main.appendChild(det);
 }
 
+// ===== アラートビュー =====
+function renderAlert(){
+  const sel=document.getElementById("yearSel"); const year=sel.value?+sel.value:null;
+  const main=document.getElementById("main"); main.innerHTML="";
+  const today=new Date();
+  const DAY=24*3600*1000;
+
+  // --- 1) 契約後1年超で着工日予定が未記載 ---
+  const late=ROWS.filter(function(r){
+    return r.contract && !isCancel(r) && !r.start && (today-r.contract)>365*DAY;
+  });
+  late.sort(function(a,b){
+    const rs=storeRank(a.store)-storeRank(b.store);
+    if(rs!==0) return rs;
+    if(a.store!==b.store) return a.store<b.store?-1:1;
+    if(a.sales!==b.sales) return a.sales<b.sales?-1:1;
+    return a.contract-b.contract;
+  });
+  const sec1=document.createElement("section"); sec1.className="block";
+  let h="<h2>未着工アラート：契約後1年超で着工日予定が未記載　"+late.length+"件</h2>";
+  h+="<div class='note'>注文タブでN列（契約日）から1年を超えてもP列（着工日予定）が未記載の物件（<b>全年対象</b>・キャンセル除外）。店舗→営業→契約日の古い順。</div>";
+  if(late.length===0){
+    h+="<div class='msg'>該当する物件はありません。</div>";
+  }else{
+    h+="<div class='scroll'><table><thead><tr><th class='dim'>店舗／営業</th><th class='l'>お客様名</th><th class='l'>工事番号</th><th class='l'>契約日</th><th>契約からの経過</th><th class='l'>完工予定</th><th class='l'>状況</th></tr></thead><tbody>";
+    const cnt={};
+    late.forEach(function(r){ cnt[r.store]=(cnt[r.store]||0)+1; });
+    let curStore=null;
+    late.forEach(function(r){
+      if(r.store!==curStore){
+        curStore=r.store;
+        h+="<tr class='subtotal'><td class='dim'>"+escapeHtml(curStore)+"　計</td><td class='l' colspan='6'>"+cnt[curStore]+"件</td></tr>";
+      }
+      const days=Math.floor((today-r.contract)/DAY);
+      h+="<tr class='warn'><td class='dim'><span class='member'>"+escapeHtml(r.sales)+"</span></td>"+
+        "<td class='l'>"+escapeHtml(r.customer)+"</td><td class='l'>"+escapeHtml(r.no)+"</td>"+
+        "<td class='l'>"+fmtDate(r.contract)+"</td>"+
+        "<td><b>"+days+"日</b>（約"+Math.round(days/30.4)+"ヶ月）</td>"+
+        "<td class='l'>"+fmtDate(effKanko(r))+"</td>"+
+        "<td class='l'>"+(r.status?escapeHtml(r.status):"<span class='zero'>—</span>")+"</td></tr>";
+    });
+    h+="</tbody></table></div>";
+  }
+  sec1.innerHTML=h; main.appendChild(sec1);
+
+  // --- 2) キャンセル物件・キャンセル率（対象年・契約日基準） ---
+  const byK={};
+  ROWS.forEach(function(r){
+    if(!(r.contract && year && r.contract.getFullYear()===year)) return;
+    const k=r.store+"\x1f"+r.sales;
+    if(!byK[k]) byK[k]={store:r.store,sales:r.sales,total:0,cancel:0};
+    byK[k].total++;
+    if(isCancel(r)) byK[k].cancel++;
+  });
+  const groups={}, gOrder=[];
+  Object.keys(byK).forEach(function(k){
+    const st=byK[k].store;
+    if(!groups[st]){ groups[st]=[]; gOrder.push(st); }
+    groups[st].push(byK[k]);
+  });
+  gOrder.sort(function(a,b){ const r=storeRank(a)-storeRank(b); return r!==0?r:(a<b?-1:1); });
+  let totAll=0, totCan=0;
+  Object.keys(byK).forEach(function(k){ totAll+=byK[k].total; totCan+=byK[k].cancel; });
+
+  const sec2=document.createElement("section"); sec2.className="block cancel";
+  let c="<h2>キャンセル状況（"+year+"年・契約日基準・注文）</h2>";
+  c+="<div class='note'>契約棟数はキャンセルを含む当年契約の総数（V列＝キャンセルで判定）。キャンセル率＝キャンセル棟数÷契約棟数。</div>";
+  c+="<div class='scroll'><table><thead><tr><th class='dim'>店舗／営業</th><th>契約棟数(キャンセル含む)</th><th>キャンセル棟数</th><th>キャンセル率</th></tr></thead><tbody>";
+  gOrder.forEach(function(st){
+    const members=groups[st].slice().sort(function(a,b){ return (b.cancel-a.cancel)||(b.total-a.total); });
+    let sT=0,sC=0; members.forEach(function(m){ sT+=m.total; sC+=m.cancel; });
+    c+="<tr class='subtotal'><td class='dim'>"+escapeHtml(st)+"　計</td><td>"+fmtCnt(sT)+"</td>"+
+       "<td>"+(sC?("<span class='badge err'>"+sC+"</span>"):fmtCnt(0))+"</td>"+
+       "<td class='pct'>"+(sT>0?fmtPct(sC/sT):"–")+"</td></tr>";
+    members.forEach(function(m){
+      c+="<tr"+(m.cancel>0?" class='err'":"")+"><td class='dim'><span class='member'>"+escapeHtml(m.sales)+"</span></td>"+
+        "<td>"+fmtCnt(m.total)+"</td>"+
+        "<td>"+(m.cancel?("<span class='badge err'>"+m.cancel+"</span>"):fmtCnt(0))+"</td>"+
+        "<td class='pct'>"+(m.total>0?fmtPct(m.cancel/m.total):"–")+"</td></tr>";
+    });
+  });
+  c+="<tr class='total'><td class='dim'>全社合計</td><td>"+fmtCnt(totAll)+"</td><td>"+fmtCnt(totCan)+"</td><td class='pct'>"+(totAll>0?fmtPct(totCan/totAll):"–")+"</td></tr>";
+  c+="</tbody></table></div>";
+  const canRows=ROWS.filter(function(r){ return r.contract && year && r.contract.getFullYear()===year && isCancel(r); });
+  if(canRows.length>0){
+    canRows.sort(function(a,b){ const rs=storeRank(a.store)-storeRank(b.store); if(rs!==0) return rs; return a.contract-b.contract; });
+    c+="<div class='note'>キャンセル物件一覧（"+canRows.length+"件）</div>";
+    c+="<div class='scroll'><table><thead><tr><th class='dim'>店舗</th><th class='l'>営業</th><th class='l'>お客様名</th><th class='l'>工事番号</th><th class='l'>契約日</th></tr></thead><tbody>";
+    canRows.forEach(function(r){
+      c+="<tr><td class='dim'>"+escapeHtml(r.store)+"</td><td class='l'>"+escapeHtml(r.sales)+"</td><td class='l'>"+escapeHtml(r.customer)+"</td><td class='l'>"+escapeHtml(r.no)+"</td><td class='l'>"+fmtDate(r.contract)+"</td></tr>";
+    });
+    c+="</tbody></table></div>";
+  }
+  sec2.innerHTML=c; main.appendChild(sec2);
+}
+
 function kpi(t,v,u,extra){ return "<div class='kpi "+(extra||"")+"'><div class='t'>"+t+"</div><div class='v'>"+v+(u?"<span class='u'>"+u+"</span>":"")+"</div></div>"; }
 
 function showError(msg){
@@ -922,6 +1022,7 @@ document.getElementById("basisCompletion").addEventListener("click", function(){
 });
 document.getElementById("tabSummary").addEventListener("click", ()=>setView("summary"));
 document.getElementById("tabDetail").addEventListener("click", ()=>setView("detail"));
+document.getElementById("tabAlert").addEventListener("click", ()=>setView("alert"));
 
 loadData();
 </script>
